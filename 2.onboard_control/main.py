@@ -2,6 +2,8 @@
 import gpiod
 import time
 import threading
+import signal
+import sys
 from breath_light import RGBBreathingLight
 
 # Open GPIO chip (usually gpiochip0)
@@ -19,6 +21,17 @@ COLORS = {
 
 
 def main():
+    # Global flag for graceful shutdown
+    running = True
+
+    def signal_handler(sig, frame):
+        nonlocal running
+        print("\nShutting down gracefully...")
+        running = False
+
+    # Setup signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+
     # Create RGB breathing light
     breathing = RGBBreathingLight(chip_name='gpiochip0', red_pin=27, green_pin=17, blue_pin=22)
 
@@ -30,7 +43,7 @@ def main():
 
     #left_button = buttonChip.get_line(645)
     #right_button = buttonChip.get_line(646)
-    
+
     #left_button = buttonChip.get_line(5)
     #right_button = buttonChip.get_line(6)
 
@@ -40,6 +53,15 @@ def main():
 
     current_color = 'green'  # Default color
     breathing_thread = None
+
+    def interruptible_sleep(duration):
+        """Sleep that can be interrupted by setting running = False"""
+        sleep_increment = 0.01
+        elapsed = 0
+        while elapsed < duration and running:
+            sleep_time = min(sleep_increment, duration - elapsed)
+            time.sleep(sleep_time)
+            elapsed += sleep_time
 
     def start_breathing(color):
         nonlocal breathing_thread
@@ -62,7 +84,7 @@ def main():
         print("RGB Breathing Light Active - Green: default, Purple: left trigger, Orange: right trigger")
         print("Press Ctrl+C to exit")
 
-        while True:
+        while running:
             # Read trigger states (assuming active low with pull-up)
             #left_pressed = left_button.get_value() == 0
             left_pressed = True
@@ -91,7 +113,7 @@ def main():
                 print(f"Switching to {current_color} breathing")
                 start_breathing(current_color)
 
-            time.sleep(0.1)  # Check triggers 10 times per second
+            interruptible_sleep(0.1)  # Check triggers 10 times per second
 
     except KeyboardInterrupt:
         print("\nShutting down...")
