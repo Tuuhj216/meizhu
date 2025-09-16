@@ -28,12 +28,15 @@ def main():
     vibrationL.request(consumer="my_script", type=gpiod.LINE_REQ_DIR_OUT)
     vibrationR.request(consumer="my_script", type=gpiod.LINE_REQ_DIR_OUT)
 
-    left_button = buttonChip.get_line(645)
-    right_button = buttonChip.get_line(646)
+    #left_button = buttonChip.get_line(645)
+    #right_button = buttonChip.get_line(646)
+    
+    #left_button = buttonChip.get_line(5)
+    #right_button = buttonChip.get_line(6)
 
     # Setup trigger input pins (assuming pull-up, active low)
-    left_button.request(consumer="triggers", type=gpiod.LINE_REQ_DIR_IN)
-    right_button.request(consumer="triggers", type=gpiod.LINE_REQ_DIR_IN)
+    #left_button.request(consumer="triggers", type=gpiod.LINE_REQ_DIR_IN)
+    #right_button.request(consumer="triggers", type=gpiod.LINE_REQ_DIR_IN)
 
     current_color = 'green'  # Default color
     breathing_thread = None
@@ -61,8 +64,10 @@ def main():
 
         while True:
             # Read trigger states (assuming active low with pull-up)
-            left_pressed = left_button.get_value() == 0
-            right_pressed = right_button.get_value() == 0
+            #left_pressed = left_button.get_value() == 0
+            left_pressed = True
+            right_pressed = False
+            #right_pressed = right_button.get_value() == 0
 
             new_color = current_color
 
