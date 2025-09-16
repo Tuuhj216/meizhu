@@ -14,6 +14,6 @@ GPIO IO 24
 
 ## breath light
 
-pin 22
+pin 15
 
-GPIO IO 25
+GPIO IO 22
