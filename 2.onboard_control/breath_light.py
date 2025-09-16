@@ -25,12 +25,24 @@ class RGBBreathingLight:
         print("\nExiting gracefully...")
         self.running = False
 
+    def interruptible_sleep(self, duration):
+        """Sleep that can be interrupted by setting self.running = False"""
+        sleep_increment = 0.01  # Check every 10ms
+        elapsed = 0
+        while elapsed < duration and self.running:
+            sleep_time = min(sleep_increment, duration - elapsed)
+            time.sleep(sleep_time)
+            elapsed += sleep_time
+
     def software_pwm_rgb(self, red_duty, green_duty, blue_duty, frequency=1000):
         """
         Software PWM implementation for RGB
         duty_cycles: 0.0 to 1.0 (0% to 100%) for each color
         frequency: PWM frequency in Hz
         """
+        if not self.running:
+            return
+
         period = 1.0 / frequency
 
         # Calculate on times for each color
@@ -49,9 +61,9 @@ class RGBBreathingLight:
         if blue_duty > 0:
             self.blue_line.set_value(1)
 
-        # Sleep for minimum on time
+        # Sleep for minimum on time (interruptible)
         if max_on_time > 0:
-            time.sleep(max_on_time)
+            self.interruptible_sleep(max_on_time)
 
         # Turn off pins as their duty cycle expires
         if red_duty < 1:
@@ -61,10 +73,10 @@ class RGBBreathingLight:
         if blue_duty < 1:
             self.blue_line.set_value(0)
 
-        # Sleep for the remaining period
+        # Sleep for the remaining period (interruptible)
         off_time = period - max_on_time
         if off_time > 0:
-            time.sleep(off_time)
+            self.interruptible_sleep(off_time)
 
     def breathing_effect_exponential(self, duration=2.0, color=(1.0, 0.5, 0.2)):
         """

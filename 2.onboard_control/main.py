@@ -105,8 +105,8 @@ def main():
         vibrationR.set_value(0)
         vibrationL.release()
         vibrationR.release()
-        left_button.release()
-        right_button.release()
+        #left_button.release()
+        #right_button.release()
         chip.close()
 
 
