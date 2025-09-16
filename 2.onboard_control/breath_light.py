@@ -5,101 +5,86 @@ import math
 import signal
 import sys
 
-class BreathingLight:
-    def __init__(self, chip_name='gpiochip0', pin=23):
+class RGBBreathingLight:
+    def __init__(self, chip_name='gpiochip0', red_pin=23, green_pin=24, blue_pin=25):
         self.chip = gpiod.Chip(chip_name)
-        self.line = self.chip.get_line(pin)
-        self.line.request(consumer="breathing_light", type=gpiod.LINE_REQ_DIR_OUT)
+        self.red_line = self.chip.get_line(red_pin)
+        self.green_line = self.chip.get_line(green_pin)
+        self.blue_line = self.chip.get_line(blue_pin)
+
+        self.red_line.request(consumer="rgb_breathing_light", type=gpiod.LINE_REQ_DIR_OUT)
+        self.green_line.request(consumer="rgb_breathing_light", type=gpiod.LINE_REQ_DIR_OUT)
+        self.blue_line.request(consumer="rgb_breathing_light", type=gpiod.LINE_REQ_DIR_OUT)
+
         self.running = True
-        
+
         # Setup signal handler for clean exit
         signal.signal(signal.SIGINT, self.signal_handler)
-    
+
     def signal_handler(self, sig, frame):
         print("\nExiting gracefully...")
         self.running = False
-    
-    def software_pwm(self, duty_cycle, frequency=1000):
+
+    def software_pwm_rgb(self, red_duty, green_duty, blue_duty, frequency=1000):
         """
-        Software PWM implementation
-        duty_cycle: 0.0 to 1.0 (0% to 100%)
+        Software PWM implementation for RGB
+        duty_cycles: 0.0 to 1.0 (0% to 100%) for each color
         frequency: PWM frequency in Hz
         """
         period = 1.0 / frequency
-        on_time = period * duty_cycle
-        off_time = period * (1 - duty_cycle)
-        
-        if duty_cycle > 0:
-            self.line.set_value(1)
-            time.sleep(on_time)
-        
-        if duty_cycle < 1:
-            self.line.set_value(0)
+
+        # Calculate on times for each color
+        red_on_time = period * red_duty
+        green_on_time = period * green_duty
+        blue_on_time = period * blue_duty
+
+        # Find the maximum on time to determine cycle timing
+        max_on_time = max(red_on_time, green_on_time, blue_on_time)
+
+        # Turn on all pins that should be on
+        if red_duty > 0:
+            self.red_line.set_value(1)
+        if green_duty > 0:
+            self.green_line.set_value(1)
+        if blue_duty > 0:
+            self.blue_line.set_value(1)
+
+        # Sleep for minimum on time
+        if max_on_time > 0:
+            time.sleep(max_on_time)
+
+        # Turn off pins as their duty cycle expires
+        if red_duty < 1:
+            self.red_line.set_value(0)
+        if green_duty < 1:
+            self.green_line.set_value(0)
+        if blue_duty < 1:
+            self.blue_line.set_value(0)
+
+        # Sleep for the remaining period
+        off_time = period - max_on_time
+        if off_time > 0:
             time.sleep(off_time)
-    
-    def breathing_effect_smooth(self, duration=2.0, steps=100):
-        """Smooth breathing effect using sine wave"""
-        print("Starting smooth breathing effect (Ctrl+C to stop)")
-        
-        while self.running:
-            for i in range(steps):
-                if not self.running:
-                    break
-                
-                # Create sine wave from 0 to 1
-                angle = (i / steps) * 2 * math.pi
-                brightness = (math.sin(angle) + 1) / 2  # 0 to 1
-                
-                # Apply PWM for this brightness level
-                start_time = time.time()
-                step_duration = duration / steps
-                
-                while time.time() - start_time < step_duration:
-                    if not self.running:
-                        break
-                    self.software_pwm(brightness, frequency=200)
-    
-    def breathing_effect_linear(self, duration=2.0, steps=50):
-        """Linear fade in/out breathing effect"""
-        print("Starting linear breathing effect (Ctrl+C to stop)")
-        
-        while self.running:
-            # Fade in
-            for i in range(steps):
-                if not self.running:
-                    break
-                brightness = i / steps
-                self.apply_brightness(brightness, duration / (steps * 2))
-            
-            # Fade out
-            for i in range(steps, 0, -1):
-                if not self.running:
-                    break
-                brightness = i / steps
-                self.apply_brightness(brightness, duration / (steps * 2))
-    
-    def apply_brightness(self, brightness, step_time):
-        """Apply brightness level for given time"""
-        start_time = time.time()
-        while time.time() - start_time < step_time:
-            if not self.running:
-                break
-            self.software_pwm(brightness, frequency=200)
-    
-    def breathing_effect_exponential(self, duration=2.0):
-        """Exponential breathing effect (more natural looking)"""
-        print("Starting exponential breathing effect (Ctrl+C to stop)")
-        
+
+    def breathing_effect_exponential(self, duration=2.0, color=(1.0, 0.5, 0.2)):
+        """
+        Exponential breathing effect for RGB (more natural looking)
+        color: tuple of (red, green, blue) intensity ratios (0.0 to 1.0)
+        """
+        print(f"Starting RGB exponential breathing effect with color {color} (Ctrl+C to stop)")
+
+        red_ratio, green_ratio, blue_ratio = color
+
         while self.running:
             start_time = time.time()
-            
+
             while time.time() - start_time < duration:
                 if not self.running:
                     break
-                
+
                 # Calculate position in cycle (0 to 1)
                 progress = (time.time() - start_time) / duration
-                
+
                 # Create exponential breathing curve
                 if progress < 0.5:
                     # Breathing in - exponential rise
@@ -107,37 +92,36 @@ class BreathingLight:
                 else:
                     # Breathing out - exponential fall
                     brightness = math.pow((1 - progress) * 2, 2)
-                
-                self.software_pwm(brightness, frequency=200)
-    
-    def simple_blink_fade(self, on_time=1.0, off_time=1.0, fade_steps=20):
-        """Simple fade in/out with adjustable timing"""
-        print("Starting simple fade breathing (Ctrl+C to stop)")
-        
-        while self.running:
-            # Fade in
-            for i in range(fade_steps):
-                if not self.running:
-                    break
-                brightness = i / fade_steps
-                self.apply_brightness(brightness, on_time / fade_steps)
-            
-            # Stay on briefly
-            time.sleep(0.1)
-            
-            # Fade out
-            for i in range(fade_steps, 0, -1):
-                if not self.running:
-                    break
-                brightness = i / fade_steps
-                self.apply_brightness(brightness, off_time / fade_steps)
-            
-            # Stay off briefly
-            time.sleep(0.1)
-    
+
+                # Apply brightness to each color channel
+                red_duty = brightness * red_ratio
+                green_duty = brightness * green_ratio
+                blue_duty = brightness * blue_ratio
+
+                self.software_pwm_rgb(red_duty, green_duty, blue_duty, frequency=200)
+
     def cleanup(self):
         """Clean up GPIO resources"""
-        self.line.set_value(0)  # Turn off LED
-        self.line.release()
+        self.red_line.set_value(0)
+        self.green_line.set_value(0)
+        self.blue_line.set_value(0)
+
+        self.red_line.release()
+        self.green_line.release()
+        self.blue_line.release()
         self.chip.close()
-        print("GPIO cleaned up")
+        print("RGB GPIO cleaned up")
+
+if __name__ == "__main__":
+    try:
+        # Create RGB breathing light with default pins (23=red, 24=green, 25=blue)
+        rgb_light = RGBBreathingLight()
+
+        # Start breathing effect with warm white color
+        rgb_light.breathing_effect_exponential(duration=3.0, color=(1.0, 0.8, 0.6))
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if 'rgb_light' in locals():
+            rgb_light.cleanup()
