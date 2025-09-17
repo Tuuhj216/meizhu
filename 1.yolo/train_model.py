@@ -55,7 +55,7 @@ def train_crosswalk_model():
 
     # Export model to different formats for deployment
     model.export(format='onnx')        # ONNX format
-    model.export(format='engine')      # TensorRT (if available)
+    #model.export(format='engine')      # TensorRT (if available)
 
     print("Training completed!")
     print(f"Best model saved at: {results.save_dir}/weights/best.pt")

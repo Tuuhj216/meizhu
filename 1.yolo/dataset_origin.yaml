@@ -1,0 +1,11 @@
+# YOLO dataset configuration for crosswalk detection
+path: ./dataset  # dataset root dir
+train: images/train  # train images (relative to 'path')
+val: images/val  # val images (relative to 'path')
+
+# Classes
+names:
+  0: crosswalk
+  1: crosswalk_line
+
+nc: 2  # number of classes
