@@ -18,8 +18,6 @@ COLORS = {
     'orange': (1.0, 0.5, 0.0)      # Right trigger
 }
 
-
-
 def main():
     # Global flag for graceful shutdown
     running = True
