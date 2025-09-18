@@ -1,0 +1,11 @@
+# Minimal requirements for MPU/embedded deployment
+opencv-python-headless>=4.8.0  # Headless version (no GUI dependencies)
+numpy>=1.21.0
+torch>=2.0.0,<2.1.0  # Specific version for stability
+torchvision>=0.15.0,<0.16.0
+ultralytics>=8.0.0  # Optional: comment out if only using basic detection
+pyttsx3>=2.90  # Optional: comment out if no audio needed
+
+# Ultra-lightweight alternative (comment above, uncomment below):
+# opencv-python-headless==4.8.0
+# numpy==1.21.6

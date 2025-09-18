@@ -1,0 +1,28 @@
+fold_configs:
+  fold_0:
+    dataset_yaml: ./dataset_k_fold/fold_0/dataset.yaml
+    train_path: images/train
+    val_path: images/val
+  fold_1:
+    dataset_yaml: ./dataset_k_fold/fold_1/dataset.yaml
+    train_path: images/train
+    val_path: images/val
+  fold_2:
+    dataset_yaml: ./dataset_k_fold/fold_2/dataset.yaml
+    train_path: images/train
+    val_path: images/val
+  fold_3:
+    dataset_yaml: ./dataset_k_fold/fold_3/dataset.yaml
+    train_path: images/train
+    val_path: images/val
+  fold_4:
+    dataset_yaml: ./dataset_k_fold/fold_4/dataset.yaml
+    train_path: images/train
+    val_path: images/val
+project_info:
+  class_count: 1
+  class_names:
+  - crosswalk
+  k_folds: 5
+  name: Crosswalk Detection K-Fold Cross Validation
+  total_samples: 247
