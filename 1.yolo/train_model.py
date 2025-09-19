@@ -77,6 +77,11 @@ def train_crosswalk_model(i: int, previous_best_model_path: str):
         plots=True,                    # save training plots
         verbose=True,                  # verbose output
         patience=50,                   # early stopping patience
+        
+        lr0=0.005,
+        box=7.5,
+        cls=1,
+        dfl=1.5,
 
         # Data augmentation
         hsv_h=0.015,                   # HSV hue augmentation
@@ -117,7 +122,7 @@ def train_crosswalk_model(i: int, previous_best_model_path: str):
 def validate_model(model_path: str = None):
     """Validate the trained model."""
     if model_path is None:
-        model_path = 'runs/train/crosswalk_detection/weights/best.pt'
+        model_path = 'runs/train/crosswalk_detection/weights/best.pt'   #要改model path
 
     if not os.path.exists(model_path):
         print(f"Model not found at {model_path}")

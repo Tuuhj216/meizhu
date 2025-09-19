@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 import time
 
 class CrosswalkDetector:
-    def __init__(self, model_path: str = 'yolov8n.pt'):
+    def __init__(self, model_path: str = 'yolov8n-seg.pt'):
         """Initialize crosswalk detection system for blind assistance."""
         self.model = YOLO(model_path)
         self.tts_engine = pyttsx3.init()

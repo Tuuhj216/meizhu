@@ -1,0 +1,9 @@
+
+# Absolute minimal requirements - install what you can
+numpy
+pillow
+opencv-python
+
+# Try these one by one:
+# tensorflow
+tflite-runtime
