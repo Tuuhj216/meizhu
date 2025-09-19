@@ -6,6 +6,8 @@ YOLO training script for crosswalk detection model.
 from ultralytics import YOLO
 import torch
 import os
+import gc
+import time
 
 # Monkey patch torch.load to use weights_only=False for YOLO models
 original_torch_load = torch.load
@@ -16,6 +18,24 @@ def patched_torch_load(f, map_location=None, pickle_module=None, weights_only=No
 
 
 torch.load = patched_torch_load
+
+
+def cleanup_resources():
+    """Comprehensive resource cleanup function."""
+    print("Performing resource cleanup...")
+
+    # Clear CUDA cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        print(f"CUDA memory cleared. Available: {torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()}")
+
+    # Force garbage collection
+    gc.collect()
+
+    # Brief pause for system cleanup
+    time.sleep(3)
+    print("Resource cleanup completed.")
 
 
 # i = 4  # dataset
@@ -81,7 +101,17 @@ def train_crosswalk_model(i: int, previous_best_model_path: str):
     print(f"Best model saved at: {results.save_dir}/weights/best.pt")
     print(f"Last model saved at: {results.save_dir}/weights/last.pt")
 
-    return results, previous_best_model_path
+    # Save the path before cleanup
+    best_model_path = f"{results.save_dir}/weights/best.pt"
+
+    # Clean up resources
+    del model
+    del results
+
+    # Use comprehensive cleanup function
+    cleanup_resources()
+
+    return None, best_model_path
 
 
 def validate_model(model_path: str = None):
@@ -122,8 +152,19 @@ if __name__ == "__main__":
     else:
         print("Starting YOLO crosswalk detection training...")
 
-        previous_best_model_path = "runs/train/crosswalk_detection/weights/best.pt"
+        previous_best_model_path = "runs/train/crosswalk_detection2/weights/best.pt"
 
-        for i in range(1,5):  # 5-fold cross-validation
+        for i in range(3,5):  # 5-fold cross-validation
+            print(f"\n=== Starting fold {i+1}/5 ===")
+
+            # Clear memory before each training iteration
+            cleanup_resources()
+
             _, previous_best_model_path = train_crosswalk_model(
                 i, previous_best_model_path)
+
+            print(f"=== Completed fold {i+1}/5 ===")
+            print(f"Memory cleanup completed, waiting before next fold...")
+
+            # Additional wait between folds for complete resource release
+            time.sleep(5)
