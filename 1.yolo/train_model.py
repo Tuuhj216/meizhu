@@ -28,7 +28,7 @@ def train_crosswalk_model():
 
     # Train the model
     results = model.train(
-        data=f'C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_{i}/dataset.yaml',           # path to dataset config
+        data=f'./dataset_k_fold/fold_{i}/dataset.yaml',           # path to dataset config
         epochs=100,                    # number of epochs
         imgsz=640,                     # image size
         batch=8,                      # batch size (adjust based on GPU memory)
@@ -89,7 +89,7 @@ def validate_model(model_path: str = None):
     model = YOLO(model_path)
 
     # Validate on test set
-    metrics = model.val(data=f'C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_{i}/dataset.yaml')
+    metrics = model.val(data=f'./dataset_k_fold/fold_{i}/dataset.yaml')
 
     print(f"Validation mAP50: {metrics.box.map50:.4f}")
     print(f"Validation mAP50-95: {metrics.box.map:.4f}")
