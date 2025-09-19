@@ -1,7 +1,7 @@
-task: detect
+task: segment
 mode: train
-model: yolov8n.pt
-data: C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_0/dataset.yaml
+model: yolov8n-seg.pt
+data: C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_4/dataset.yaml
 epochs: 100
 time: null
 patience: 50
@@ -13,7 +13,7 @@ cache: false
 device: '0'
 workers: 4
 project: runs/train
-name: crosswalk_detection2
+name: crosswalk_detection6
 exist_ok: false
 pretrained: true
 optimizer: auto
@@ -103,4 +103,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: C:\Users\ysann\Desktop\meizu\1.yolo\runs\train\crosswalk_detection2
+save_dir: C:\Users\ysann\Desktop\meizu\1.yolo\runs\train\crosswalk_detection6

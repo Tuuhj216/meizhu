@@ -7,7 +7,7 @@ from ultralytics import YOLO
 import torch
 import os
 
-i = 4 # dataset
+i = 0 # dataset
 
 def train_crosswalk_model():
     """Train YOLO model for crosswalk detection."""
@@ -18,7 +18,7 @@ def train_crosswalk_model():
 
     # Load a pretrained YOLOv8 model
     #model = YOLO('yolov8n.pt')  # nano model (fastest)
-    model = YOLO('yolov8n-seg.pt')
+    model = YOLO('best.pt')
     # Alternative models:
     # model = YOLO('yolov8s.pt')  # small
     # model = YOLO('yolov8m.pt')  # medium
@@ -29,7 +29,7 @@ def train_crosswalk_model():
         data=f'C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_{i}/dataset.yaml',           # path to dataset config
         epochs=100,                    # number of epochs
         imgsz=640,                     # image size
-        batch=16,                      # batch size (adjust based on GPU memory)
+        batch=8,                      # batch size (adjust based on GPU memory)
         device=device,                 # training device
         workers=4,                     # number of worker threads
         project='runs/train',          # project name
@@ -40,6 +40,11 @@ def train_crosswalk_model():
         plots=True,                    # save training plots
         verbose=True,                  # verbose output
         patience=50,                   # early stopping patience
+        
+        lr0=0.005,
+        box=7.5,
+        cls=1,
+        dfl=1.5,
 
         # Data augmentation
         hsv_h=0.015,                   # HSV hue augmentation
