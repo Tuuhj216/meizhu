@@ -7,35 +7,52 @@ from ultralytics import YOLO
 import torch
 import os
 
-i = 4 # dataset
+# Monkey patch torch.load to use weights_only=False for YOLO models
+original_torch_load = torch.load
 
-def train_crosswalk_model():
+
+def patched_torch_load(f, map_location=None, pickle_module=None, weights_only=None, **kwargs):
+    return original_torch_load(f, map_location=map_location, pickle_module=pickle_module, weights_only=False, **kwargs)
+
+
+torch.load = patched_torch_load
+
+
+# i = 4  # dataset
+
+
+def train_crosswalk_model(i: int, previous_best_model_path: str):
     """Train YOLO model for crosswalk detection."""
 
     # Check if CUDA is available
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    # Load a pretrained YOLOv8 model
-    #model = YOLO('yolov8n.pt')  # nano model (fastest)
-    model = YOLO('yolov8n-seg.pt')
+    model = YOLO('yolov8m-seg.pt')
+
+    if i != 0:
+        # model = YOLO(f'runs/train/crosswalk_detection{i-1}/weights/best.pt')
+        print("Loading previous best model for fine-tuning... from: ", previous_best_model_path)
+        model = YOLO(previous_best_model_path)
+
     # Alternative models:
-    # model = YOLO('yolov8s.pt')  # small
-    # model = YOLO('yolov8m.pt')  # medium
-    # model = YOLO('yolov8l.pt')  # large
+    # model = YOLO('yolov8n-seg.pt')  # nano
+    # model = YOLO('yolov8s-seg.pt')  # small
+    # model = YOLO('yolov8l-seg.pt')  # large
 
     # Train the model
     results = model.train(
-        data=f'C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_{i}/dataset.yaml',           # path to dataset config
+        # path to dataset config
+        data=os.path.abspath(f'dataset_k_fold/fold_{i}/dataset.yaml'),
         epochs=100,                    # number of epochs
-        imgsz=640,                     # image size
-        batch=16,                      # batch size (adjust based on GPU memory)
+        imgsz=640,                      # balanced resolution for speed
+        batch=20,                       # larger batch for faster training
         device=device,                 # training device
-        workers=4,                     # number of worker threads
+        workers=32,                    # 32 workers for RTX 5070 Ti
         project='runs/train',          # project name
         name='crosswalk_detection',    # experiment name
         save=True,                     # save checkpoints
-        save_period=10,                # save every N epochs
+        save_period=25,                # save less frequently for speed
         val=True,                      # validate during training
         plots=True,                    # save training plots
         verbose=True,                  # verbose output
@@ -58,13 +75,14 @@ def train_crosswalk_model():
 
     # Export model to different formats for deployment
     model.export(format='onnx')        # ONNX format
-    #model.export(format='engine')      # TensorRT (if available)
+    # model.export(format='engine')      # TensorRT (if available)
 
     print("Training completed!")
     print(f"Best model saved at: {results.save_dir}/weights/best.pt")
     print(f"Last model saved at: {results.save_dir}/weights/last.pt")
 
-    return results
+    return results, previous_best_model_path
+
 
 def validate_model(model_path: str = None):
     """Validate the trained model."""
@@ -78,19 +96,24 @@ def validate_model(model_path: str = None):
     model = YOLO(model_path)
 
     # Validate on test set
-    metrics = model.val(data=f'C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_{i}/dataset.yaml')
+    metrics = model.val(data=os.path.abspath(
+        f'dataset_k_fold/fold_{i}/dataset.yaml'))
 
     print(f"Validation mAP50: {metrics.box.map50:.4f}")
     print(f"Validation mAP50-95: {metrics.box.map:.4f}")
 
     return metrics
 
+
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description='Train YOLO crosswalk detection model')
-    parser.add_argument('--validate', action='store_true', help='Validate existing model')
-    parser.add_argument('--model', type=str, help='Path to model for validation')
+    parser = argparse.ArgumentParser(
+        description='Train YOLO crosswalk detection model')
+    parser.add_argument('--validate', action='store_true',
+                        help='Validate existing model')
+    parser.add_argument('--model', type=str,
+                        help='Path to model for validation')
 
     args = parser.parse_args()
 
@@ -98,4 +121,9 @@ if __name__ == "__main__":
         validate_model(args.model)
     else:
         print("Starting YOLO crosswalk detection training...")
-        train_crosswalk_model()
+
+        previous_best_model_path = "runs/train/crosswalk_detection/weights/best.pt"
+
+        for i in range(1,5):  # 5-fold cross-validation
+            _, previous_best_model_path = train_crosswalk_model(
+                i, previous_best_model_path)
