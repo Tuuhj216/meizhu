@@ -1,0 +1,10 @@
+ultralytics==8.0.196
+opencv-python==4.8.1.78
+numpy==1.24.3
+torch>=1.13.0
+torchvision>=0.14.0
+pillow>=9.0.0
+matplotlib>=3.5.0
+scipy>=1.9.0
+pycocotools>=2.0.6
+pathlib2>=2.3.0
