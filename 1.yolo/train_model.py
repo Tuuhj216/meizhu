@@ -17,9 +17,11 @@ def train_crosswalk_model():
     print(f"Using device: {device}")
 
     # Load a pretrained YOLOv8 model
-    #model = YOLO('yolov8n.pt')  # nano model (fastest)
-    model = YOLO('best.pt')
+    model = YOLO('yolov8n-seg.pt')
+    #model = YOLO('best.pt')
+
     # Alternative models:
+    #model = YOLO('yolov8n.pt')  # nano model (fastest)
     # model = YOLO('yolov8s.pt')  # small
     # model = YOLO('yolov8m.pt')  # medium
     # model = YOLO('yolov8l.pt')  # large
@@ -63,6 +65,10 @@ def train_crosswalk_model():
 
     # Export model to different formats for deployment
     model.export(format='onnx')        # ONNX format
+
+    # Export tflite format
+    #model.export(format="tflite", int8=True, data=f'C:/Users/ysann/Desktop/meizu/1.yolo/dataset_k_fold/fold_{i}/dataset.yaml')
+    
     #model.export(format='engine')      # TensorRT (if available)
 
     print("Training completed!")
@@ -74,7 +80,7 @@ def train_crosswalk_model():
 def validate_model(model_path: str = None):
     """Validate the trained model."""
     if model_path is None:
-        model_path = 'runs/train/crosswalk_detection/weights/best.pt'
+        model_path = 'runs/train/crosswalk_detection/weights/best.pt'   #要改model path
 
     if not os.path.exists(model_path):
         print(f"Model not found at {model_path}")
