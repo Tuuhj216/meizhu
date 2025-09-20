@@ -16,7 +16,7 @@ class RealTimeTFLiteInference:
             input_size (tuple): Input size for the model (width, height)
         """
         # Initialize camera
-        #self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
 
@@ -31,7 +31,7 @@ class RealTimeTFLiteInference:
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
-        # ✅ 自動抓模型的輸入大小
+        # âœ… è‡ªå‹•æŠ“æ¨¡åž‹çš„è¼¸å…¥å¤§å°
         self.input_size = tuple(self.input_details[0]['shape'][1:3])
 
         # Frame queue for processing
@@ -42,6 +42,10 @@ class RealTimeTFLiteInference:
         self.frame_count = 0
         self.start_time = time.time()
         self.running = False
+
+        self.num_classes = 3
+        self.class_names = ['left', 'right', 'straight']
+        self.conf_thres = 0.5
         
         print(f"Model loaded: {model_path}")
         print(f"Input shape: {self.input_details[0]['shape']}")
@@ -73,6 +77,12 @@ class RealTimeTFLiteInference:
     
     def inference_worker(self):
         """Worker thread for running TensorFlow Lite inference"""
+
+        print("=== OUTPUT DETAILS ===")
+        for od in self.output_details:
+            print(od['index'], od['shape'], od['dtype'])
+        print("======================")
+        
         while True:
             try:
                 # Get frame from queue
@@ -104,7 +114,7 @@ class RealTimeTFLiteInference:
                 if "timed out" not in str(e):
                     print(f"Error in inference worker: {e}")
                 continue
-    
+
     def preprocess_frame(self, frame):
         """Preprocess frame for model input"""
         """Preprocess frame for model input"""
@@ -126,33 +136,49 @@ class RealTimeTFLiteInference:
         input_data = np.expand_dims(input_data, axis=0)
 
         return input_data
-
     
     def postprocess_output(self, output_data):
-        """Post-process model output"""
-        # This depends on your model's output format
-        # For classification: return class probabilities
-        # For detection: return bounding boxes and classes
-        # For segmentation: return segmentation mask
-        
-        if len(output_data.shape) == 2:  # Classification
-            probabilities = output_data[0]
-            top_class = np.argmax(probabilities)
-            confidence = probabilities[top_class]
+        try:
+            #æ‹¿å‡ºoutput
+            det = self.interpreter.get_tensor(self.output_details[1]['index'])[0]  # shape: [39, 8400]
+            protos = self.interpreter.get_tensor(self.output_details[0]['index'])[0]  # shape: [160, 160, 32]
+
+            #transpose
+            det = det.transpose(1, 0)  # shape: [8400, 39]
+
+            print("Det shape:", det.shape)
+            print("First row:", det[0])
+
+            directions = []
+            for row in det:
+                score = row[4]
+                if score < self.conf_thres:
+                    continue
+
+                class_probs = row[5:8]  # 3 é¡žåˆ¥
+                class_id = int(np.argmax(class_probs))
+                confidence = class_probs[class_id]
+                direction = self.class_names[class_id]
+                directions.append((direction, confidence))
+
+            if not directions:
+                return {'type': 'nodetection'}
+
+            best_direction = max(directions, key=lambda x: x[1])
             return {
-                'type': 'classification',
-                'class': int(top_class),
-                'confidence': float(confidence),
-                'probabilities': probabilities.tolist()
+                'type': 'direction_classification',
+                'direction': best_direction[0],
+                'confidence': best_direction[1],
+                'all_directions': directions
             }
-        else:
-            # Generic output for other model types
+
+        except Exception as e:
             return {
-                'type': 'generic',
-                'output_shape': output_data.shape,
-                'output': output_data.tolist()
+                'type': 'error',
+                'message': str(e),
+                'raw_output': str(output_data)[:300] + "..."
             }
-    
+
     def results_worker(self):
         """Worker thread for handling inference results"""
         while True:
@@ -162,7 +188,15 @@ class RealTimeTFLiteInference:
                 # Print results
                 print(f"Frame {self.frame_count}:")
                 print(f"  Inference time: {result['inference_time']:.3f}s")
-                print(f"  Results: {result['results']}")
+                try:
+                    res = result['results']
+                    if isinstance(res, dict):
+                        print(f"  Direction: {res.get('direction')}, Confidence: {res.get('confidence')}")
+                        print(f"  All directions (top 5): {res.get('all_directions')[:5]}")
+                    else:
+                        print(f"  Raw result: {str(res)[:300]}...")  # é™åˆ¶é•·åº¦
+                except Exception as e:
+                    print(f"âš ï¸ Failed to print result: {e}")
                 
                 # Calculate FPS
                 if self.frame_count % 30 == 0:
@@ -200,13 +234,33 @@ class RealTimeTFLiteInference:
             self.running = False
             self.cap.release()
 
+    def run_single_frame(self):
+        """Capture one frame, run inference, and print result"""
+        ret, frame = self.cap.read()
+        if not ret:
+            print("❌ Failed to read frame from camera.")
+            return
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_resized = cv2.resize(frame_rgb, self.input_size)
+        input_data = self.preprocess_frame(frame_resized)
+
+        self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
+        self.interpreter.invoke()
+
+        # 這裡你可以選擇用 output_details[1]（det tensor）或自己調整
+        output_data = self.interpreter.get_tensor(self.output_details[1]['index'])
+        result = self.postprocess_output(output_data)
+
+        print("📷 Inference result:")
+        print(result)
+
+
 def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Real-time TensorFlow Lite inference with camera')
     parser.add_argument('--model', required=True, help='Path to .tflite model')
-    parser.add_argument('--width', type=int, default=224, help='Input width')
-    parser.add_argument('--height', type=int, default=224, help='Input height')
     
     args = parser.parse_args()
     
@@ -216,7 +270,9 @@ def main():
         #input_size=(args.width, args.height)
     )
     
-    inference_system.run()
+    #inference_system.run()
+
+    inference_system.run_single_frame()
 
 if __name__ == "__main__":
     main()
