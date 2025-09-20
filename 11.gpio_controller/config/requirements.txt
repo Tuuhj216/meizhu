@@ -1,0 +1,8 @@
+# ZeroMQ for inter-process communication
+pyzmq>=25.0.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# GPIO control (install via apt: sudo apt-get install python3-libgpiod)
+# libgpiod
