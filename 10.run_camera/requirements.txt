@@ -1,9 +1,17 @@
-
-# Absolute minimal requirements - install what you can
-numpy
-pillow
-opencv-python
-
-# Try these one by one:
-# tensorflow
-tflite-runtime
+dbus-python==1.3.2
+gpiod==2.3.0
+markdown-it-py==2.1.0
+mdurl==0.1.2
+netifaces==0.11.0
+numpy==1.26.4
+olefile==0.46
+opencv-python==4.12.0.88
+Pillow==9.4.0
+pycairo==1.20.1
+Pygments==2.14.0
+PyGObject==3.42.2
+PyYAML==6.0
+rich==13.3.1
+RPi.GPIO==0.7.1a4
+speedtest-cli==2.1.3
+tflite-runtime==2.14.0
