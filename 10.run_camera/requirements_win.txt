@@ -1,0 +1,6 @@
+
+# Absolute minimal requirements - install what you can
+numpy==1.26.4
+pillow
+opencv-python==4.8.0.76
+tensorflow==2.14.0

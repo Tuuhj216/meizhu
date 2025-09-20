@@ -1,5 +1,6 @@
 import numpy as np
-import tflite_runtime.interpreter as tflite
+#import tflite_runtime.interpreter as tflite
+from tensorflow.lite.python.interpreter import Interpreter
 import cv2
 import threading
 import time
@@ -15,7 +16,7 @@ class RealTimeTFLiteInference:
             input_size (tuple): Input size for the model (width, height)
         """
         # Initialize camera
-        self.cap = cv2.VideoCapture(0)
+        #self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
 
@@ -23,7 +24,8 @@ class RealTimeTFLiteInference:
             raise RuntimeError("Cannot open camera")
         
         # Load TensorFlow Lite model
-        self.interpreter = tflite.Interpreter(model_path=model_path)
+        #self.interpreter = tflite.Interpreter(model_path=model_path)  #for linux
+        self.interpreter = Interpreter(model_path=model_path) #for win
         self.interpreter.allocate_tensors()
         
         self.input_details = self.interpreter.get_input_details()
