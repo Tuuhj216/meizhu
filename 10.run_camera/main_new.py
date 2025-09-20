@@ -31,7 +31,7 @@ class RealTimeTFLiteInference:
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
-        # âœ… è‡ªå‹•æŠ“æ¨¡åž‹çš„è¼¸å…¥å¤§å°
+        # 
         self.input_size = tuple(self.input_details[0]['shape'][1:3])
 
         # Frame queue for processing
@@ -139,7 +139,7 @@ class RealTimeTFLiteInference:
     
     def postprocess_output(self, output_data):
         try:
-            #æ‹¿å‡ºoutput
+            #output
             det = self.interpreter.get_tensor(self.output_details[1]['index'])[0]  # shape: [39, 8400]
             protos = self.interpreter.get_tensor(self.output_details[0]['index'])[0]  # shape: [160, 160, 32]
 
@@ -155,7 +155,7 @@ class RealTimeTFLiteInference:
                 if score < self.conf_thres:
                     continue
 
-                class_probs = row[5:8]  # 3 é¡žåˆ¥
+                class_probs = row[5:8]  # 
                 class_id = int(np.argmax(class_probs))
                 confidence = class_probs[class_id]
                 direction = self.class_names[class_id]
@@ -194,7 +194,7 @@ class RealTimeTFLiteInference:
                         print(f"  Direction: {res.get('direction')}, Confidence: {res.get('confidence')}")
                         print(f"  All directions (top 5): {res.get('all_directions')[:5]}")
                     else:
-                        print(f"  Raw result: {str(res)[:300]}...")  # é™åˆ¶é•·åº¦
+                        print(f"  Raw result: {str(res)[:300]}...")  
                 except Exception as e:
                     print(f"âš ï¸ Failed to print result: {e}")
                 
@@ -209,30 +209,26 @@ class RealTimeTFLiteInference:
                     print(f"Error in results worker: {e}")
                 continue
     
-    def run(self):
-        """Start the real-time inference system"""
-        print("Starting real-time inference...")
+    def run_image_file(self, image_path):
+        """Run inference on a single image file"""
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"❌ Failed to load image: {image_path}")
+            return
 
-        self.running = True
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_resized = cv2.resize(image_rgb, self.input_size)
+        input_data = self.preprocess_frame(image_resized)
 
-        # Start worker threads
-        capture_thread = threading.Thread(target=self.capture_worker, daemon=True)
-        inference_thread = threading.Thread(target=self.inference_worker, daemon=True)
-        results_thread = threading.Thread(target=self.results_worker, daemon=True)
+        self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
+        self.interpreter.invoke()
 
-        capture_thread.start()
-        inference_thread.start()
-        results_thread.start()
+        output_data = self.interpreter.get_tensor(self.output_details[1]['index'])
+        result = self.postprocess_output(output_data)
 
-        try:
-            # Keep main thread alive
-            while self.running:
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\nStopping...")
-        finally:
-            self.running = False
-            self.cap.release()
+        print("🖼️ Inference result:")
+        print(result)
+
 
     def run_single_frame(self):
         """Capture one frame, run inference, and print result"""
@@ -261,18 +257,25 @@ def main():
     
     parser = argparse.ArgumentParser(description='Real-time TensorFlow Lite inference with camera')
     parser.add_argument('--model', required=True, help='Path to .tflite model')
-    
+    parser.add_argument('--image', help='Path to image file')
+
     args = parser.parse_args()
     
     # Create and run inference system
     inference_system = RealTimeTFLiteInference(
         model_path=args.model
+
         #input_size=(args.width, args.height)
     )
     
     #inference_system.run()
 
-    inference_system.run_single_frame()
+    if args.image:
+        inference_system.run_image_file(args.image)
+    else:
+        inference_system.run_single_frame()
+        
+    
 
 if __name__ == "__main__":
     main()
