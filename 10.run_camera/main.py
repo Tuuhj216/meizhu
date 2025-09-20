@@ -7,7 +7,7 @@ import time
 from queue import Queue
 
 class RealTimeTFLiteInference:
-    def __init__(self, model_path, input_size=(224, 224)):
+    def __init__(self, model_path,):
         """
         Initialize real-time TensorFlow Lite inference with OpenCV
 
@@ -16,7 +16,7 @@ class RealTimeTFLiteInference:
             input_size (tuple): Input size for the model (width, height)
         """
         # Initialize camera
-        #self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
 
@@ -27,11 +27,13 @@ class RealTimeTFLiteInference:
         #self.interpreter = tflite.Interpreter(model_path=model_path)  #for linux
         self.interpreter = Interpreter(model_path=model_path) #for win
         self.interpreter.allocate_tensors()
-        
+
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
-        self.input_size = input_size
-        
+
+        # ✅ 自動抓模型的輸入大小
+        self.input_size = tuple(self.input_details[0]['shape'][1:3])
+
         # Frame queue for processing
         self.frame_queue = Queue(maxsize=5)
         self.result_queue = Queue()
@@ -43,7 +45,7 @@ class RealTimeTFLiteInference:
         
         print(f"Model loaded: {model_path}")
         print(f"Input shape: {self.input_details[0]['shape']}")
-        print(f"Expected input size: {input_size}")
+        print(f"Expected input size: {self.input_size}")
         
     def capture_worker(self):
         """Worker thread for capturing frames from camera"""
@@ -105,13 +107,26 @@ class RealTimeTFLiteInference:
     
     def preprocess_frame(self, frame):
         """Preprocess frame for model input"""
-        # Normalize to [0, 1]
-        input_data = frame.astype(np.float32) / 255.0
-        
+        """Preprocess frame for model input"""
+        input_shape = self.input_details[0]['shape']
+        input_dtype = self.input_details[0]['dtype']
+
+        # Resize to model input size
+        frame_resized = cv2.resize(frame, (input_shape[2], input_shape[1]))
+
+        # Convert to RGB if needed
+        if frame_resized.shape[2] == 3 and input_dtype == np.uint8:
+            input_data = frame_resized.astype(np.uint8)
+        elif input_dtype == np.float32:
+            input_data = frame_resized.astype(np.float32) / 255.0
+        else:
+            raise ValueError(f"Unsupported input dtype: {input_dtype}")
+
         # Add batch dimension
         input_data = np.expand_dims(input_data, axis=0)
-        
+
         return input_data
+
     
     def postprocess_output(self, output_data):
         """Post-process model output"""
@@ -197,8 +212,8 @@ def main():
     
     # Create and run inference system
     inference_system = RealTimeTFLiteInference(
-        model_path=args.model,
-        input_size=(args.width, args.height)
+        model_path=args.model
+        #input_size=(args.width, args.height)
     )
     
     inference_system.run()
