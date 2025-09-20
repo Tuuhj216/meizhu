@@ -1,0 +1,66 @@
+
+INFERENCE SIMULATION REPORT
+===========================
+
+Model Analysis:
+- Expected format: YOLO Object Detection
+- Output shape: [1, 39, 8400]
+- Model type: Detection (not segmentation)
+
+Inference Results:
+- Total detections found: 28
+- Confidence threshold: 0.5
+
+Detection Details:
+
+Detection 1:
+  - Class ID: 14
+  - Confidence: 0.704
+  - Bounding Box: x=0.872, y=0.045, w=0.281, h=0.647
+
+Detection 2:
+  - Class ID: 33
+  - Confidence: 0.688
+  - Bounding Box: x=0.366, y=0.269, w=0.752, h=0.582
+
+Detection 3:
+  - Class ID: 32
+  - Confidence: 0.902
+  - Bounding Box: x=0.227, y=0.693, w=0.761, h=0.326
+
+Detection 4:
+  - Class ID: 6
+  - Confidence: 0.871
+  - Bounding Box: x=0.541, y=0.946, w=0.081, h=0.370
+
+Detection 5:
+  - Class ID: 18
+  - Confidence: 0.751
+  - Bounding Box: x=0.785, y=0.062, w=0.697, h=0.370
+
+Detection 6:
+  - Class ID: 15
+  - Confidence: 0.830
+  - Bounding Box: x=0.612, y=0.839, w=0.912, h=0.866
+
+Detection 7:
+  - Class ID: 21
+  - Confidence: 0.955
+  - Bounding Box: x=0.460, y=0.389, w=0.444, h=0.826
+
+Detection 8:
+  - Class ID: 12
+  - Confidence: 0.558
+  - Bounding Box: x=0.052, y=0.354, w=0.868, h=0.293
+
+Detection 9:
+  - Class ID: 23
+  - Confidence: 0.568
+  - Bounding Box: x=0.779, y=0.986, w=0.923, h=0.772
+
+Detection 10:
+  - Class ID: 33
+  - Confidence: 0.837
+  - Bounding Box: x=0.965, y=0.721, w=0.548, h=0.529
+
+... and 18 more detections
