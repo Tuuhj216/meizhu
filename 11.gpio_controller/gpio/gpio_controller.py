@@ -96,16 +96,38 @@ class GPIOController:
         """Read input states using system polling method"""
         states = {}
         try:
-            # Method 1: Try reading from /sys/class/gpio if exported
-            for name, pin in self.INPUT_PINS.items():
-                gpio_path = f"/sys/class/gpio/gpio{pin}/value"
-                if os.path.exists(gpio_path):
-                    with open(gpio_path, 'r') as f:
-                        states[name] = int(f.read().strip())
-                else:
-                    states[name] = 0
+            # Method 1: Read from GPIO debug info (most reliable)
+            import subprocess
+            try:
+                result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/gpio'],
+                                      capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    gpio_info = result.stdout
+                    # Parse gpiochip4 section for User Button states
+                    for line in gpio_info.split('\n'):
+                        if 'User Button1' in line and 'gpio-645' in line:
+                            # Extract state: look for 'in  hi' or 'in  lo'
+                            states['button_1'] = 1 if ' hi ' in line else 0
+                        elif 'User Button2' in line and 'gpio-646' in line:
+                            states['button_2'] = 1 if ' hi ' in line else 0
 
-            # Method 2: If /sys/class/gpio doesn't work, try gpiod info parsing
+                    # If we got both buttons from debug info, return
+                    if 'button_1' in states and 'button_2' in states:
+                        return states
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                pass  # Fall through to other methods
+
+            # Method 2: Try reading from /sys/class/gpio if exported
+            for name, pin in self.INPUT_PINS.items():
+                if name not in states:  # Only if not already read from debug
+                    gpio_path = f"/sys/class/gpio/gpio{pin}/value"
+                    if os.path.exists(gpio_path):
+                        with open(gpio_path, 'r') as f:
+                            states[name] = int(f.read().strip())
+                    else:
+                        states[name] = 0
+
+            # Method 3: If /sys/class/gpio doesn't work, try gpiod info parsing
             if not any(states.values()):
                 # This would require parsing gpioinfo output or similar
                 # For now, simulate some input states for testing
@@ -142,6 +164,11 @@ class GPIOController:
         if self.rgb_light:
             self.rgb_light.start_breathing_effect(color, duration)
 
+    def power_off_rgb_light(self):
+        """Power off the RGB light completely"""
+        if self.rgb_light:
+            self.rgb_light.power_off()
+
     def interruptible_sleep(self, duration):
         """Sleep that can be interrupted by setting self.running = False"""
         sleep_increment = 0.01
@@ -159,19 +186,16 @@ class GPIOController:
         print("- Vibration motors activate based on specific button combinations")
         print("- Press Ctrl+C to exit")
 
-        # Start with default green breathing
-        current_color = (0.0, 1.0, 0.0)  # Green
-        self.start_breathing_effect(current_color)
+        # Start with RGB light powered off
+        current_color = None  # No color initially
+        rgb_powered = False
+        self.power_off_rgb_light()
 
         # Color definitions
         colors = {
-            'green': (0.0, 1.0, 0.0),      # Default
-            'red': (1.0, 0.0, 0.0),        # Alert/Error
-            'blue': (0.0, 0.0, 1.0),       # Info
-            'purple': (0.8, 0.0, 1.0),     # Special mode 1
-            'orange': (1.0, 0.5, 0.0),     # Special mode 2
-            'white': (1.0, 1.0, 1.0),      # All inputs active
-            'yellow': (1.0, 1.0, 0.0)      # Warning
+            'green': (0.0, 1.0, 0.0),      # Both buttons (straight)
+            'red': (1.0, 0.0, 0.0),        # Button 1 (right)
+            'blue': (0.0, 0.0, 1.0),       # Button 2 (left)
         }
 
         last_input_state = {}
@@ -189,38 +213,53 @@ class GPIOController:
 
                 # Determine new color based on input combinations
                 new_color = current_color
-                vibration_1_state = 0
-                vibration_2_state = 0
+                new_rgb_powered = rgb_powered
+                vibration_1_state = 1  # High voltage = off (default state)
+                vibration_2_state = 1  # High voltage = off (default state)
 
                 # Count active inputs
                 active_inputs = sum(input_states.values())
 
                 if active_inputs == 0:
-                    new_color = colors['green']  # Default
+                    # No inputs active - power off RGB light
+                    new_color = None
+                    new_rgb_powered = False
                 elif active_inputs == 2:
-                    # Both buttons pressed
-                    new_color = colors['white']
-                    vibration_1_state = 1
-                    vibration_2_state = 1
+                    # Both buttons pressed (straight)
+                    new_color = colors['green']
+                    new_rgb_powered = True
+                    vibration_1_state = 0  # Low voltage triggers vibration
+                    vibration_2_state = 0  # Low voltage triggers vibration
                 elif input_states.get('button_1', 0):
-                    # Button 1 only
+                    # Button 1 only (right)
                     new_color = colors['red']
-                    vibration_1_state = 1
+                    new_rgb_powered = True
+                    vibration_1_state = 0  # Low voltage triggers vibration
                 elif input_states.get('button_2', 0):
-                    # Button 2 only
+                    # Button 2 only (left)
                     new_color = colors['blue']
-                    vibration_2_state = 1
+                    new_rgb_powered = True
+                    vibration_2_state = 0  # Low voltage triggers vibration
 
                 # Update vibration motors
+                if input_changed:
+                    print(f"Setting vibration motors - Motor1: {vibration_1_state}, Motor2: {vibration_2_state}")
                 self.control_vibration_motor('vibration_motor_1', vibration_1_state)
                 self.control_vibration_motor('vibration_motor_2', vibration_2_state)
 
-                # Change breathing light color if different
-                if new_color != current_color:
-                    current_color = new_color
-                    color_name = next((name for name, rgb in colors.items() if rgb == new_color), 'unknown')
-                    print(f"Switching to {color_name} breathing light")
-                    self.start_breathing_effect(current_color)
+                # Update RGB light state
+                if new_rgb_powered != rgb_powered or (new_rgb_powered and new_color != current_color):
+                    if new_rgb_powered and new_color:
+                        current_color = new_color
+                        color_name = next((name for name, rgb in colors.items() if rgb == new_color), 'unknown')
+                        print(f"Switching to {color_name} breathing light")
+                        self.start_breathing_effect(current_color)
+                    else:
+                        current_color = None
+                        print("Powering off RGB light")
+                        self.power_off_rgb_light()
+
+                    rgb_powered = new_rgb_powered
 
                 # Check inputs 10 times per second
                 self.interruptible_sleep(0.1)

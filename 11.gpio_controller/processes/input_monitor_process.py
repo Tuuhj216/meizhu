@@ -76,15 +76,37 @@ class InputMonitorProcess(BaseProcess):
         """Read input states using system polling method (fallback)"""
         states = {}
         try:
-            # Try reading from /sys/class/gpio if exported
+            # Method 1: Read from GPIO debug info (most reliable)
+            import subprocess
+            try:
+                result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/gpio'],
+                                      capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    gpio_info = result.stdout
+                    # Parse gpiochip4 section for User Button states
+                    for line in gpio_info.split('\n'):
+                        if 'User Button1' in line and 'gpio-645' in line:
+                            # Extract state: look for 'in  hi' or 'in  lo'
+                            states['button_1'] = 1 if ' hi ' in line else 0
+                        elif 'User Button2' in line and 'gpio-646' in line:
+                            states['button_2'] = 1 if ' hi ' in line else 0
+
+                    # If we got both buttons from debug info, return
+                    if 'button_1' in states and 'button_2' in states:
+                        return states
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                pass  # Fall through to other methods
+
+            # Method 2: Try reading from /sys/class/gpio if exported
             for name, pin in [('button_1', 5), ('button_2', 6)]:
-                gpio_path = f"/sys/class/gpio/gpio{pin}/value"
-                if os.path.exists(gpio_path):
-                    with open(gpio_path, 'r') as f:
-                        states[name] = int(f.read().strip())
-                else:
-                    # Simulate random input for testing if hardware not available
-                    states[name] = random.choice([0, 1]) if random.random() < 0.05 else 0
+                if name not in states:  # Only if not already read from debug
+                    gpio_path = f"/sys/class/gpio/gpio{pin}/value"
+                    if os.path.exists(gpio_path):
+                        with open(gpio_path, 'r') as f:
+                            states[name] = int(f.read().strip())
+                    else:
+                        # Simulate random input for testing if hardware not available
+                        states[name] = random.choice([0, 1]) if random.random() < 0.05 else 0
 
         except Exception as e:
             print(f"{self.process_name}: Error in system polling: {e}")

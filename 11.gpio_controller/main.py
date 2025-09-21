@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from gpio_controller import GPIOController
+from gpio.gpio_controller import GPIOController
 
 def main():
     print("Starting NXP GPIO Controller...")
