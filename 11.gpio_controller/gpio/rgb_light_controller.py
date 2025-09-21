@@ -26,13 +26,21 @@ class RGBLightController:
 
     def set_color(self, red=0, green=0, blue=0):
         """Set RGB color (0 or 1 for each channel)"""
-        self.red_controller.set_value(red)
-        self.green_controller.set_value(green)
-        self.blue_controller.set_value(blue)
+        if hasattr(self, 'red_controller'):
+            self.red_controller.set_value(red)
+        if hasattr(self, 'green_controller'):
+            self.green_controller.set_value(green)
+        if hasattr(self, 'blue_controller'):
+            self.blue_controller.set_value(blue)
 
     def turn_off(self):
         """Turn off all LEDs"""
         self.set_color(0, 0, 0)
+
+    def power_off(self):
+        """Turn off power supply and stop all effects"""
+        self.stop_effect()
+        self.turn_off()
 
     def software_pwm_rgb(self, red_duty, green_duty, blue_duty, frequency=1000):
         """
@@ -54,11 +62,11 @@ class RGBLightController:
         max_on_time = max(red_on_time, green_on_time, blue_on_time)
 
         # Turn on all pins that should be on
-        if red_duty > 0:
+        if red_duty > 0 and hasattr(self, 'red_controller'):
             self.red_controller.set_value(1)
-        if green_duty > 0:
+        if green_duty > 0 and hasattr(self, 'green_controller'):
             self.green_controller.set_value(1)
-        if blue_duty > 0:
+        if blue_duty > 0 and hasattr(self, 'blue_controller'):
             self.blue_controller.set_value(1)
 
         # Sleep for minimum on time (interruptible)
@@ -66,11 +74,11 @@ class RGBLightController:
             self._interruptible_sleep(max_on_time)
 
         # Turn off pins as their duty cycle expires
-        if red_duty < 1:
+        if red_duty < 1 and hasattr(self, 'red_controller'):
             self.red_controller.set_value(0)
-        if green_duty < 1:
+        if green_duty < 1 and hasattr(self, 'green_controller'):
             self.green_controller.set_value(0)
-        if blue_duty < 1:
+        if blue_duty < 1 and hasattr(self, 'blue_controller'):
             self.blue_controller.set_value(0)
 
         # Sleep for the remaining period (interruptible)
@@ -133,18 +141,23 @@ class RGBLightController:
 
     def stop_effect(self):
         """Stop any running effect"""
-        if self.current_thread and self.current_thread.is_alive():
+        if hasattr(self, 'current_thread') and self.current_thread and self.current_thread.is_alive():
             self.running = False
             self.current_thread.join(timeout=1)
 
     def cleanup(self):
         """Clean up all GPIO resources"""
         self.stop_effect()
-        self.turn_off()
+        # Explicitly set all RGB pins to low voltage (0)
+        self.set_color(0, 0, 0)
+        print("RGB light set to low voltage and effects stopped")
 
-        self.red_controller.cleanup()
-        self.green_controller.cleanup()
-        self.blue_controller.cleanup()
+        if hasattr(self, 'red_controller'):
+            self.red_controller.cleanup()
+        if hasattr(self, 'green_controller'):
+            self.green_controller.cleanup()
+        if hasattr(self, 'blue_controller'):
+            self.blue_controller.cleanup()
 
     def __del__(self):
         """Destructor to ensure cleanup"""
