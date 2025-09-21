@@ -160,165 +160,112 @@ class RealTimeTFLiteInference:
             zero_point = int(zero_points) if not isinstance(zero_points, (list, tuple)) else 0
             
         return scale, zero_point
+        
+    def dequantize(self, tensor, output_index):
+        """Dequantize tensor using quantization parameters"""
+        scale, zero_point = self.get_quantization_params(output_index)
+        
+        # 只有當需要反量化時才進行
+        if scale != 1.0 or zero_point != 0:
+            return scale * (tensor.astype(np.float32) - zero_point)
+        else:
+            return tensor.astype(np.float32)
     
-    def postprocess_output(self, output_data=None):
+    def postprocess_output(self):
         try:
-            # Get detection tensor (output_1: [1, 39, 8400])
-            det = self.interpreter.get_tensor(self.output_details[1]['index'])[0]  # shape: [39, 8400]
-            protos = self.interpreter.get_tensor(self.output_details[0]['index'])[0]  # shape: [160, 160, 32]
+           # Step 1: 取得原始 proto tensor（shape: [160, 160, 32]）
+            proto = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
 
-            print(f"Det shape before transpose: {det.shape}")
-            print(f"Det dtype: {det.dtype}")
-            print(f"Det range: {np.min(det)} - {np.max(det)}")
-            
-            # Handle quantized outputs
-            if det.dtype == np.uint8:
-                # Get quantization parameters
-                scale, zero_point = self.get_quantization_params(1)  # output_1
-                print(f"Quantization params - Scale: {scale}, Zero point: {zero_point}")
-                
-                # Dequantize
-                det = det.astype(np.float32)
-                det = scale * (det - zero_point)
-                print(f"After dequantization range: {np.min(det)} - {np.max(det)}")
+            # Step 2: 做反量化（如果需要的話）
+            proto = self.dequantize(proto, 0)  # 使用 output_index = 0
 
-            # Transpose to [8400, 39]
-            det = det.transpose(1, 0)
+            # ✅ Step 3: 轉置成 [32, 160, 160]
+            proto = proto.transpose(2, 0, 1)
+
+            # Output 1 是 detection head → [1, 39, 8400]
+            det_raw = self.interpreter.get_tensor(self.output_details[1]['index'])[0]
+            det_raw = self.dequantize(det_raw, 1)  # 使用 output_index = 1
+            det = det_raw.transpose(1, 0)  # shape: [8400, 39]
+
+
+            num_classes = len(self.class_names)
+            boxes = det[:, :4]
+            obj_conf = det[:, 4]
+            class_probs = det[:, 5:5 + num_classes]
+            mask_coeffs = det[:, -32:]
+
+            # 計算最終置信度與類別
+            class_ids = np.argmax(class_probs, axis=1)  # shape: [8400]
+            class_conf = np.max(class_probs, axis=1)    # shape: [8400]
+            final_conf = obj_conf * class_conf
+
+            print(f"det_raw shape: {det_raw.shape}")
+            print(f"det shape after transpose: {det.shape}")
+            print(f"proto shape: {proto.shape}")
             
-            print(f"Det shape after transpose: {det.shape}")
-            
-            # 分析前幾個檢測的結構
-            print("\n📊 Analyzing detection structure:")
-            for i in range(min(3, det.shape[0])):
-                detection = det[i]
-                non_zero_indices = np.where(detection != 0)[0]
-                non_zero_values = detection[non_zero_indices]
-                print(f"Detection {i}: Non-zero at indices {non_zero_indices.tolist()}")
-                print(f"  Values: {non_zero_values.tolist()}")
-                
-                # 分析數值範圍來猜測含義
-                if len(non_zero_values) > 0:
-                    bbox_like = non_zero_values[(non_zero_values > 0) & (non_zero_values < 640)]  # 可能的座標
-                    conf_like = non_zero_values[(non_zero_values > 0) & (non_zero_values < 1)]     # 可能的機率
-                    other_values = non_zero_values[~((non_zero_values > 0) & (non_zero_values < 640)) & 
-                                                  ~((non_zero_values > 0) & (non_zero_values < 1))]
-                    
-                    print(f"  Possible bbox coords: {bbox_like.tolist()}")
-                    print(f"  Possible confidences: {conf_like.tolist()}")
-                    print(f"  Other values: {other_values.tolist()}")
-            
-            # 基於分析的結果，嘗試不同的解析策略
-            directions = []
-            max_detections = min(100, det.shape[0])
-            
-            for i in range(max_detections):
-                row = det[i]
-                
-                # 跳過全零行
-                if np.all(row == 0):
-                    continue
-                    
-                # 策略1: 尋找最大值作為主要置信度
-                max_val = np.max(row)
-                max_idx = np.argmax(row)
-                
-                if max_val > 0:
-                    # 尋找可能的類別信息
-                    # 檢查是否有3個連續的值可能代表類別概率
-                    possible_class_regions = []
-                    
-                    # 檢查常見的類別概率位置
-                    for start_idx in [5, 8, 32, 36]:  # 常見位置
-                        if start_idx + 2 < len(row):
-                            class_candidates = row[start_idx:start_idx+3]
-                            if np.any(class_candidates > 0):
-                                possible_class_regions.append({
-                                    'start': start_idx,
-                                    'values': class_candidates,
-                                    'max_val': np.max(class_candidates),
-                                    'max_idx': np.argmax(class_candidates)
-                                })
-                    
-                    # 策略2: 使用位置信息推測類別
-                    # 基於你的數據，位置2有最大值26.38，位置0,1,3有相同值7.91
-                    # 這可能表示：位置0-3是邊界框，其他位置可能包含類別信息
-                    
-                    # 從第4個位置開始尋找非零值
-                    remaining_values = row[4:]
-                    non_zero_remaining = remaining_values[remaining_values != 0]
-                    
-                    if len(non_zero_remaining) >= 3:
-                        # 取前3個非零值作為類別概率
-                        class_probs = non_zero_remaining[:3]
-                        class_id = int(np.argmax(class_probs))
-                        class_conf = class_probs[class_id]
-                        
-                        # 使用不同的置信度計算方式
-                        confidences = [
-                            float(max_val / 100),  # 正規化最大值
-                            float(class_conf),      # 直接使用類別置信度
-                            float(max_val * class_conf / 1000),  # 組合方式
-                        ]
-                        
-                        final_conf = max([c for c in confidences if c > 0])
-                        
-                        if final_conf >= self.conf_thres:
-                            direction = self.class_names[class_id]
-                            directions.append((direction, final_conf, {
-                                'method': 'custom_format',
-                                'max_val': float(max_val),
-                                'max_idx': int(max_idx),
-                                'class_probs': [float(x) for x in class_probs],
-                                'class_conf': float(class_conf),
-                                'final_conf': float(final_conf),
-                                'detection_idx': i
-                            }))
-                    
-                    # 策略3: 如果沒找到明確的類別，使用位置啟發式
-                    elif max_val > self.conf_thres:
-                        # 基於最大值的位置推測類別
-                        if max_idx < 13:
-                            estimated_class = 0  # left
-                        elif max_idx < 26:
-                            estimated_class = 1  # right  
-                        else:
-                            estimated_class = 2  # straight
-                            
-                        direction = self.class_names[estimated_class]
-                        confidence = float(max_val / 100)  # 正規化
-                        
-                        if confidence >= self.conf_thres:
-                            directions.append((direction, confidence, {
-                                'method': 'position_heuristic',
-                                'max_val': float(max_val),
-                                'max_idx': int(max_idx),
-                                'estimated_class': estimated_class,
-                                'confidence': confidence
-                            }))
-            
-            if directions:
-                directions.sort(key=lambda x: x[1], reverse=True)
-                best_direction = directions[0]
-                
-                print(f"\n✅ Found {len(directions)} valid detections!")
-                
-                return {
-                    'type': 'direction_classification',
-                    'direction': best_direction[0],
-                    'confidence': float(best_direction[1]),
-                    'confidence_info': best_direction[2],
-                    'all_directions': directions[:5]
-                }
-            else:
+
+            # 過濾低置信度
+            valid_idx = np.where(final_conf > self.conf_thres)[0]
+            if len(valid_idx) == 0:
                 return {
                     'type': 'no_detection',
                     'message': f'No detections above threshold {self.conf_thres}',
                     'debug_info': {
-                        'max_value_found': float(np.max(det)),
-                        'threshold': self.conf_thres,
-                        'suggestion': f'Try lowering threshold to {float(np.max(det)/200):.4f}'
+                        'max_conf': float(np.max(final_conf)),
+                        'suggestion': f'Try lowering threshold to {float(np.max(final_conf) / 2):.4f}'
                     }
                 }
+
+            # 選擇前幾個高置信度的 detection
+            selected = valid_idx[:5]
+            directions = []
+            
+
+            for i in selected:
+                print(f"class_ids[i]: {class_ids[i]}, type: {type(class_ids[i])}")
+                class_id = int(class_ids[i])
+                direction = self.class_names[class_id]
+                confidence = float(final_conf[i])
+                bbox = boxes[i].tolist()
+                coeff = mask_coeffs[i]  # [32]
+
+                # Step 1: flatten proto → [32, 160*160]
+                proto_flat = proto.reshape(32, -1)
+
+                # Step 2: dot product → [160*160]
+                mask = np.dot(coeff, proto_flat)
+
+                # Step 3: clip to prevent overflow
+                mask = np.clip(mask, -30, 30)
+
+                # Step 4: sigmoid activation
+                mask = 1 / (1 + np.exp(-mask))
+
+                # Step 5: reshape to image size
+                mask = mask.reshape(160, 160)
+
+                # Step 6: binarize
+                mask = (mask > 0.5).astype(np.uint8)
+
+                directions.append({
+                    'direction': direction,
+                    'confidence': confidence,
+                    'class_id': class_id,
+                    'bbox': bbox,
+                    'mask': mask.tolist()  # 可視化時再轉回 numpy
+                })
+
+            # 回傳最高置信度的結果
+            best = max(directions, key=lambda x: x['confidence'])
+            return {
+                'type': 'direction_classification',
+                'direction': best['direction'],
+                'confidence': best['confidence'],
+                'class_id': best['class_id'],
+                'bbox': best['bbox'],
+                'mask': best['mask'],
+                'all_directions': directions
+            }
 
         except Exception as e:
             import traceback
@@ -327,7 +274,7 @@ class RealTimeTFLiteInference:
                 'message': str(e),
                 'traceback': traceback.format_exc()
             }
-
+        
     def results_worker(self):
         """Worker thread for handling inference results"""
         while True:
@@ -416,8 +363,13 @@ class RealTimeTFLiteInference:
                     print(f"  📋 Max value: {info['max_val']:.3f} at position {info.get('max_idx', 'unknown')}")
                 if 'class_probs' in info:
                     print(f"  📋 Class probabilities: {[f'{p:.3f}' for p in info['class_probs']]}")
-            if 'all_directions' in result and len(result['all_directions']) > 1:
-                print(f"  📋 Other detections: {[(d[0], f'{d[1]:.3f}') for d in result['all_directions'][1:3]]}")  # Show top 3
+            
+                if 'all_directions' in result and len(result['all_directions']) > 1:
+                    other_detections = []
+                    for d in result['all_directions'][1:3]:
+                        other_detections.append((d['direction'], f"{d['confidence']:.3f}"))
+                    print(f"  📋 Other detections: {other_detections}")
+
         elif result['type'] == 'no_detection':
             print(f"  ❌ {result['message']}")
             if 'debug_info' in result:

@@ -351,7 +351,7 @@ def main():
         model_path=args.model,
         input_size=(args.width, args.height),
         camera_width=1280,
-        camera_height=800
+        camera_height=800,
         model_path=args.model
         #input_size=(args.width, args.height)
     )
